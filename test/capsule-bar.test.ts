@@ -89,66 +89,6 @@ function tempStore(clock: FakeClock, maxSteps = 20): CapsuleStore {
 }
 
 // ---------------------------------------------------------------------------
-// 用例 1-3:显式状态机
-// ---------------------------------------------------------------------------
-
-describe('显式标注:任务与步骤', () => {
-    it('用例1: capsule_task 设置/清除(steps 一次性录入且首步 active)', () => {
-        const clock = new FakeClock(T0)
-        const store = tempStore(clock)
-        const { ctx, registered } = createFakeCtx()
-        apply(ctx, { storePath: store.storePath, maxSteps: 20, staleMinutes: 30 })
-
-        const taskTool = registered.find((tool) => tool.name === 'capsule_task')!
-        const result = taskTool.execute(
-            { task: '数据迁移', steps: ['备份', '迁移', '校验'] },
-            execStub(),
-        ) as Promise<{ task: string | null; steps: number }>
-        return result.then((value) => {
-            expect(value.task).toBe('数据迁移')
-            expect(value.steps).toBe(3)
-            const state = store.get('s1')
-            expect(state.steps[0]?.status).toBe('active')
-            expect(state.steps[1]?.status).toBe('pending')
-
-            // 清除:task=null → task=null steps=[]
-            return (taskTool.execute({ task: null }, execStub()) as Promise<unknown>).then(() => {
-                const cleared = store.get('s1')
-                expect(cleared.task).toBeNull()
-                expect(cleared.steps).toEqual([])
-            })
-        })
-    })
-
-    it('用例2: addStep 追加与上限(超限抛错提示清理;id 自增)', () => {
-        const clock = new FakeClock(T0)
-        const store = tempStore(clock, 2)
-        expect(store.addStep('s1', '一').id).toBe(1)
-        expect(store.addStep('s1', '二').id).toBe(2)
-        expect(() => store.addStep('s1', '三')).toThrow(/上限/)
-        expect(() => store.addStep('s1', '三')).toThrow(/清理/)
-    })
-
-    it('用例3: setStepStatus 状态机(合法流转、pending→done 拒绝、failed→pending 重开)', () => {
-        const clock = new FakeClock(T0)
-        const store = tempStore(clock)
-        store.setTask('s1', '任务')
-        store.addStep('s1', '步骤')
-        expect(store.setStepStatus('s1', 1, 'active').status).toBe('active')
-        expect(store.setStepStatus('s1', 1, 'done').status).toBe('done')
-
-        // pending → done 直接拒绝(带当前状态)
-        store.addStep('s1', '第二步')
-        expect(() => store.setStepStatus('s1', 2, 'done')).toThrow(/pending/)
-
-        // failed → pending 可重开
-        store.setStepStatus('s1', 2, 'active')
-        expect(store.setStepStatus('s1', 2, 'failed').status).toBe('failed')
-        expect(store.setStepStatus('s1', 2, 'pending').status).toBe('pending')
-    })
-})
-
-// ---------------------------------------------------------------------------
 // 用例 4-8:自动观测器
 // ---------------------------------------------------------------------------
 
@@ -253,14 +193,13 @@ describe('自动观测器', () => {
 // ---------------------------------------------------------------------------
 
 describe('状态机与存储', () => {
-    it('用例9: 双通道互不覆盖(观测只改 phase/tool/计数;显式只改 task/steps)', () => {
+    it('用例9: 双通道互不覆盖(观测只改 phase/tool/计数;任务写入只改 task/steps)', () => {
         const clock = new FakeClock(T0)
         const store = tempStore(clock)
         const { ctx, domainEvents, turnEvents } = createFakeCtx()
         attachWatcher(ctx, store, clock.now)
 
-        store.setTask('s1', '任务A')
-        store.addStep('s1', '步骤1')
+        store.applyTaskBlueprint('s1', '任务A', [{ label: '步骤1', status: 'active' }])
 
         const pre = listenerOf(domainEvents, 'tools/pre-execute')
         const result = listenerOf(domainEvents, 'tools/result')
@@ -275,7 +214,7 @@ describe('状态机与存储', () => {
                 expect(state.steps[0]?.label).toBe('步骤1')
             })
             .then(() => {
-                // 反向:setTask/addStep 不动观测字段
+                // 反向:任务写入不动观测字段
                 store.mergeObservation('s1', { phase: 'tool', toolCallsThisTurn: 7 })
                 store.setTask('s1', '任务B')
                 const state = store.get('s1')
@@ -354,67 +293,16 @@ describe('插件装配', () => {
         )
     })
 
-    it('用例15: 工具注册(apply 后恰 4 个显式工具,名称匹配)', () => {
+    it('用例15: 插件装配(不注册显式工具;观测器 4 个监听已挂载)', () => {
         const clock = new FakeClock(T0)
         const store = tempStore(clock)
         const { ctx, registered, domainEvents, turnEvents } = createFakeCtx()
         apply(ctx, { storePath: store.storePath, maxSteps: 20, staleMinutes: 30 })
-        expect(registered.map((tool) => tool.name).sort()).toEqual([
-            'capsule_clear',
-            'capsule_step',
-            'capsule_step_done',
-            'capsule_task',
-        ])
+        // 方向修正后不向模型暴露任何工具:胶囊完全由旁路观测驱动
+        expect(registered).toEqual([])
         // 观测器已挂载:tools 域 2 个 + turn 边界 2 个
         expect(domainEvents.map((entry) => entry.name).sort()).toEqual(['tools/pre-execute', 'tools/result'])
         expect(turnEvents.map((entry) => entry.name).sort()).toEqual(['turn/end', 'turn/start'])
-    })
-
-    it('用例16: 显式工具端到端(task→step→step_done→clear,文件状态断言)', async () => {
-        const clock = new FakeClock(T0)
-        const store = tempStore(clock)
-        const { ctx, registered } = createFakeCtx()
-        apply(ctx, { storePath: store.storePath, maxSteps: 20, staleMinutes: 30 })
-        const byName = new Map(registered.map((tool) => [tool.name, tool]))
-        const exec = execStub('s9')
-
-        await (byName.get('capsule_task')!.execute as (args: object, exec: object) => Promise<unknown>)(
-            { task: '数据迁移', steps: ['备份', '迁移', '校验'] },
-            exec,
-        )
-        let disk = JSON.parse(
-            readFileSync(join(store.storePath, 'sessions', 's9.json'), 'utf8'),
-        ) as { task: string | null; steps: CapsuleStep[] }
-        expect(disk.task).toBe('数据迁移')
-        expect(disk.steps[0]?.status).toBe('active')
-
-        await (byName.get('capsule_step')!.execute as (args: object, exec: object) => Promise<unknown>)(
-            { label: '收尾' },
-            exec,
-        )
-        await (byName.get('capsule_step_done')!.execute as (args: object, exec: object) => Promise<unknown>)(
-            { stepId: 1, result: 'done' },
-            exec,
-        )
-        disk = JSON.parse(readFileSync(join(store.storePath, 'sessions', 's9.json'), 'utf8')) as {
-            task: string | null
-            steps: CapsuleStep[]
-        }
-        expect(disk.steps).toHaveLength(4)
-        expect(disk.steps[0]?.status).toBe('done')
-
-        await (byName.get('capsule_clear')!.execute as (args: object, exec: object) => Promise<unknown>)(
-            {},
-            exec,
-        )
-        disk = JSON.parse(readFileSync(join(store.storePath, 'sessions', 's9.json'), 'utf8')) as {
-            task: string | null
-            steps: CapsuleStep[]
-            phase: string
-        }
-        expect(disk.task).toBeNull()
-        expect(disk.steps).toEqual([])
-        expect(disk.phase).toBe('idle') // 观测字段保留
     })
 })
 

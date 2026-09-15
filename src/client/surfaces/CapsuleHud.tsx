@@ -370,7 +370,7 @@ export const CapsuleHud = memo(function CapsuleHud(props: CapsuleHudProps) {
                         <button
                             className={styles.clearBtn}
                             type="button"
-                            title="清除任务(模型工具 capsule_clear 的 UI 入口,骨架占位)"
+                            title="清除任务(清理类交互通道待接入,骨架占位)"
                         >
                             清除
                         </button>

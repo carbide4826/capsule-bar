@@ -81,14 +81,6 @@ export type ObservationPatch = Partial<Pick<
 
 const POINTER_FILE = 'current.json'
 
-/** setStepStatus 的合法流转表;其余一律抛错(状态机同 task-queue 模式) */
-const STEP_TRANSITIONS: Record<CapsuleStep['status'], CapsuleStep['status'][]> = {
-    pending: ['active'],
-    active: ['done', 'failed'],
-    failed: ['pending'],
-    done: [],
-}
-
 function defaultState(sessionId: string, now: () => Date): CapsuleState {
     return {
         version: 1,
@@ -115,7 +107,7 @@ function sessionFileName(sessionId: string): string {
 export class CapsuleStore {
     readonly storePath: string
     private readonly now: () => Date
-    /** 步骤上限,超出 addStep 抛错 */
+    /** 步骤上限(配置契约保留;当前无增量写入调用方,applyTaskBlueprint 整清单替换不校验) */
     readonly maxSteps: number
 
     // 显式赋值而非参数属性:--patch 直载走 Node strip-only 模式,不支持 constructor 参数属性
@@ -175,57 +167,13 @@ export class CapsuleStore {
         return next
     }
 
-    /** 显式:设置任务(重置 steps;task=null 清除) */
+    /** 触发源 #3:设置任务名(重置 steps;task=null 清除) */
     setTask(sessionId: string, task: string | null): CapsuleState {
         const state = this.readState(sessionId)
         state.task = task
         state.steps = []
-        // 任务开始时间:第一个显式标注兜底
+        // 任务开始时间:goal 观测首次兜底
         if (task !== null && !state.startedAt) state.startedAt = this.now().toISOString()
-        return this.writeState(state)
-    }
-
-    /** 显式:追加步骤(自动 pending;超过 maxSteps 抛错)。推进由工具层用 setStepStatus 完成 */
-    addStep(sessionId: string, label: string): CapsuleStep {
-        const state = this.readState(sessionId)
-        if (state.steps.length >= this.maxSteps) {
-            throw new Error(
-                `步骤已达上限 ${this.maxSteps},请先完成/清理步骤(capsule_step_done 或 capsule_clear)`,
-            )
-        }
-        const existing = state.steps.map((step) => step.id)
-        const id = (existing.length > 0 ? Math.max(...existing) : 0) + 1
-        const step: CapsuleStep = { id, label, status: 'pending' }
-        state.steps.push(step)
-        if (!state.startedAt) state.startedAt = this.now().toISOString()
-        this.writeState(state)
-        return step
-    }
-
-    /** 显式:推进步骤状态;非法流转抛错并给出当前状态 */
-    setStepStatus(sessionId: string, stepId: number, status: CapsuleStep['status']): CapsuleStep {
-        const state = this.readState(sessionId)
-        const step = state.steps.find((candidate) => candidate.id === stepId)
-        if (!step) {
-            throw new Error(`步骤 ${stepId} 不存在(共 ${state.steps.length} 步)`)
-        }
-        if (!STEP_TRANSITIONS[step.status].includes(status)) {
-            throw new Error(
-                `步骤 ${stepId} 非法流转 ${step.status} → ${status},当前状态:${step.status}`,
-            )
-        }
-        if (status === 'active') step.startedAt = this.now().toISOString()
-        if (status === 'done' || status === 'failed') step.endedAt = this.now().toISOString()
-        step.status = status
-        this.writeState(state)
-        return step
-    }
-
-    /** 显式:清空任务与步骤(保留观测字段) */
-    clearTask(sessionId: string): CapsuleState {
-        const state = this.readState(sessionId)
-        state.task = null
-        state.steps = []
         return this.writeState(state)
     }
 
