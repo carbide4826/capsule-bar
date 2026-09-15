@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "mimosa-finding-ledger-batch/v1",
+  "batchId": "stop-20260915T043904263Z-36832-1b139672bdc8",
+  "runId": "20260915T043904263Z-36832-1b139672bdc8",
+  "runStatus": "completed",
+  "coverage": {
+    "status": "complete",
+    "reasons": []
+  },
+  "source": {
+    "component": "zcode-hook",
+    "operationId": "Stop"
+  },
+  "revision": "a03b286322a1c9cfae1672d7f929f4cc729e1805",
+  "diffHash": "48102c29796881d2c805b374c524c79bc61aa2e84ae6bc13f1a3dadf152611e7",
+  "rulesVersion": "unavailable",
+  "sessionHash": "5736081592055c38207e6bc33621cb6a61707ea98dfff51252ce7425c0977fb8",
+  "reportRef": ".mimosa/reports/task-review-sess_2861cd35-f347-4d3a-8223-91bbace0078e-20260915T043904263Z-36832-1b139672bdc8.json",
+  "events": [],
+  "observedFindingIds": [],
+  "verifiedFiles": [
+    {
+      "file": "src/client/surfaces/demo-mock.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    },
+    {
+      "file": "src/client/surfaces/capsule-hud.ts",
+      "direct": "complete",
+      "projectContext": "partial"
+    }
+  ],
+  "recordedAt": "2026-09-15T04:39:05.189Z"
+}

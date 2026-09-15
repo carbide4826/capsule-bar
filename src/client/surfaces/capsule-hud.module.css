@@ -1,0 +1,253 @@
+/* 悬浮胶囊 design tokens 与组件样式(SOP 03 §3,dsh 主题对齐版)。
+ *
+ * 对齐策略(证据见 DEVLOG D13):
+ * - 颜色/字体/阴影全部消费 dsh 开放的 --dsw-alias-* / --dsw-font-* / --dsw-elevation-* 变量,
+ *   明暗主题自动跟随宿主(不再自带 prefers-color-scheme 覆盖);
+ *   词汇表与官方 client-ui 包及社区插件(dsh-genui 459 处、dsh-web-ui 205+ 处)一致;
+ * - 仅 state 色带本地 fallback(dsh-pet 同款做法),宿主变量缺失时退回 SOP 03 原配色;
+ * - 圆角无官方变量,用前端高频字面值(12px);位置/高度/blur/z-index 为本地 --cb-*;
+ * - CSS Modules:类名构建期哈希防冲突;:root 自定义属性保持全局。
+ * 构建期由 tsdown cssModulesPlugin 内联进 client.js 并自动注入 <style>,产物无独立 css 文件。 */
+:root {
+  --cb-pos-right: 16px;
+  --cb-pos-top: 16px;
+  --cb-pill-h: 36px;
+  --cb-radius-pill: 999px;
+  --cb-radius-panel: 12px;
+  --cb-blur: 8px;
+  --cb-z-index: 2147483000;
+}
+
+.layer {
+  position: fixed;
+  right: var(--cb-pos-right);
+  top: var(--cb-pos-top);
+  z-index: var(--cb-z-index);
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-primary);
+}
+
+.pill {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  height: var(--cb-pill-h);
+  max-width: 420px; /* 硬上限:任何数据下都不撑破对话列 */
+  overflow: hidden;
+  padding: 0 14px;
+  border-radius: var(--cb-radius-pill);
+  background: var(--dsw-alias-bg-layer-3);
+  border: 1px solid var(--dsw-alias-border-l2);
+  box-shadow: var(--dsw-elevation-prominent);
+  backdrop-filter: blur(var(--cb-blur));
+  cursor: pointer;
+  transition: opacity .3s, transform .3s;
+}
+
+.pillHidden {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+}
+
+.pillFlash {
+  outline: 2px solid var(--dsw-alias-state-success-primary, #4fbf7b);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-dimmed);
+  flex: none;
+}
+
+.dotThinking {
+  background: var(--dsw-alias-state-business-primary, #4d9fff);
+  animation: cb-pulse 1.2s infinite;
+}
+
+.dotTool {
+  background: var(--dsw-alias-state-success-primary, #4fbf7b);
+  animation: cb-blink 0.8s infinite;
+}
+
+/* 呼吸态(定时任务即将执行):琥珀点 + 缓慢呼吸缩放 */
+.dotBreathing {
+  background: var(--dsw-alias-state-warn-primary, #e8a33d);
+  animation: cb-breathe 1.6s ease-in-out infinite;
+}
+
+.pillBreathing {
+  outline: 1px solid var(--dsw-alias-state-warn-primary, #e8a33d);
+}
+
+@keyframes cb-breathe {
+  0%, 100% { opacity: 1; transform: scale(1) }
+  50% { opacity: .5; transform: scale(1.4) }
+}
+
+/* 胶囊内可收缩的长文本:超宽时按 flex 顺序被压缩并以省略号收尾 */
+.task {
+  max-width: 10em;
+  min-width: 0; /* 允许缩到内容宽度以下,否则 ellipsis 不生效 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 胶囊内固定片段(状态点、进度、箭头)不参与收缩 */
+.pill > span:not(.task) {
+  flex: none;
+}
+
+.pill .task {
+  flex: 0 1 auto;
+}
+
+.dim {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 双箭头 SVG 图标(对角线画出,无需 transform);block 消除基线空隙 */
+.glyphSvg {
+  display: block;
+}
+
+.panel {
+  width: 280px;
+  background: var(--dsw-alias-bg-layer-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--cb-radius-panel);
+  box-shadow: var(--dsw-elevation-prominent);
+  overflow: hidden;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.headerInfo {
+  min-width: 0;
+  flex: 1;
+}
+
+.collapseBtn {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent; /* 常态无边框;透明占位防 hover 时布局抖动 */
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+
+.collapseBtn:hover {
+  border-color: var(--dsw-alias-border-l1); /* 比 border-l2 更淡的一级 */
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--dsw-alias-border-l1);
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.progressInner {
+  display: block;
+  height: 100%;
+  background: var(--dsw-alias-brand-primary);
+  transition: width .3s;
+}
+
+/* 面板内容区:整体滚动容器,内部按类型分块 */
+.sections {
+  max-height: 240px;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+/* 类型块:相邻块之间用分隔线隔开,带小标题(任务步骤块无标题,panelHeader 即其标题区) */
+.section {
+  padding: 2px 0;
+}
+
+.section + .section {
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.sectionTitle {
+  padding: 0 12px 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 600;
+}
+
+.step {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 12px;
+}
+
+.stepActive {
+  color: var(--dsw-alias-brand-primary);
+}
+
+.stepDone {
+  color: var(--dsw-alias-label-tertiary);
+  text-decoration: line-through;
+}
+
+.stepFailed {
+  color: var(--dsw-alias-state-error-primary, #e5646c);
+}
+
+.panelFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.clearBtn {
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.clearBtn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+@keyframes cb-pulse {
+  0%, 100% { opacity: 1 }
+  50% { opacity: .35 }
+}
+
+@keyframes cb-blink {
+  0%, 100% { opacity: 1 }
+  50% { opacity: .2 }
+}

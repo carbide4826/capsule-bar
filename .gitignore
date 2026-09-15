@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+
+# 本地调试 overlay 内含本机绝对路径,属机器私有文件,不入库
+dev.patch.yml
